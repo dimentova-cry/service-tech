@@ -12,6 +12,7 @@ import {
 } from '@mui/material'; // Импорт основных компонентов Material-UI для построения интерфейса
 import SettingsIcon from '@mui/icons-material/Settings'; // Иконка настроек
 import LogoutIcon from '@mui/icons-material/Logout'; // Иконка выхода
+import LinkIcon from '@mui/icons-material/Link';
 import Brightness4Icon from '@mui/icons-material/Brightness4'; // Иконка для светлой темы
 import Brightness7Icon from '@mui/icons-material/Brightness7'; // Иконка для темной темы
 import { useNavigate } from 'react-router-dom'; // Хук для навигации между страницами
@@ -29,7 +30,7 @@ export default function Header() {
     // Инициализируем хук для программной навигации
     const navigate = useNavigate();
     // Название компании, отображаемое в заголовке
-    const companyName = "Сервисная служба Андрей Николаевич и К";
+    const companyName = "Service support application";
 
     // Состояние для управления открытием/закрытием выпадающего меню пользователя
     const [anchorEl, setAnchorEl] = useState(null);
@@ -57,6 +58,7 @@ export default function Header() {
 
     // Определяем отображаемое имя пользователя: приоритет отдается названию компании, затем ФИО сотрудника, затем ФИО админа
     const userDisplayName = user?.company_name || user?.fio_staff || user?.fio_admin || 'User';
+    const vkBindUrl = "https://vk.me/tech_hello_world_notify";
 
     return (
         <AppBar
@@ -203,6 +205,19 @@ export default function Header() {
                         {mode === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
                     </MenuItem>
                     <Divider /> {/* Разделитель */}
+                    {user && (
+                        <MenuItem
+                            component="a"
+                            href={vkBindUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <ListItemIcon>
+                                <LinkIcon fontSize="small" />
+                            </ListItemIcon>
+                            Add a VK Notify Bot
+                        </MenuItem>
+                    )}
                     {/* Пункт меню для выхода из системы */}
                     <MenuItem onClick={handleLogout}>
                         <ListItemIcon>

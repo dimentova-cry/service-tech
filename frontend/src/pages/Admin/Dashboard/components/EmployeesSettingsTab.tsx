@@ -17,13 +17,19 @@ import {
   DialogActions,
   CircularProgress,
   InputAdornment,
+  Autocomplete,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import { staffApi, StaffFromServer } from "../../../../services/requests";
+import {
+  staffApi,
+  StaffFromServer,
+  clientApi,
+  ClientFromServer,
+} from "../../../../services/requests";
 
 export default function EmployeesSettingsTab() {
   const [staffMembers, setStaffMembers] = useState<StaffFromServer[]>([]);
@@ -42,6 +48,8 @@ export default function EmployeesSettingsTab() {
     password: false,
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [clients, setClients] = useState<ClientFromServer[]>([]);
+  const [selectedClientIds, setSelectedClientIds] = useState<number[]>([]);
 
   // Сортировка сотрудников по алфавиту по ФИО
   const sortedStaffMembers = useMemo(() => {
@@ -52,6 +60,10 @@ export default function EmployeesSettingsTab() {
 
   useEffect(() => {
     fetchStaffMembers();
+    clientApi
+      .getAllClients()
+      .then((data) => setClients(data as unknown as ClientFromServer[]))
+      .catch((error) => console.error("Ошибка при загрузке заказчиков:", error));
   }, []);
 
   const fetchStaffMembers = async () => {
@@ -94,6 +106,7 @@ export default function EmployeesSettingsTab() {
     setIsEditing(false);
     setOpenDialog(true);
     setShowPassword(false);
+    setSelectedClientIds([]);
     // Сброс ошибок
     setErrors({
       fio_staff: false,
@@ -112,6 +125,7 @@ export default function EmployeesSettingsTab() {
     setIsEditing(true);
     setOpenDialog(true);
     setShowPassword(false);
+    setSelectedClientIds(staff.assigned_clients?.map((client) => client.id) ?? []);
     // Сброс ошибок
     setErrors({
       fio_staff: false,
@@ -163,14 +177,16 @@ export default function EmployeesSettingsTab() {
         }
 
         await staffApi.updateStaff(editingStaff.id, updateData);
+        await staffApi.setAssignedClients(editingStaff.id, selectedClientIds);
       } else {
-        await staffApi.createStaff({
+        const created = await staffApi.createStaff({
           fio: newStaff.fio_staff!,
           login: newStaff.login_staff!,
           password: newStaff.password_plain || "",
           phone_number_staff: (newStaff as any).phone_number_staff || null,
           email: (newStaff as any).email || null,
         });
+        await staffApi.setAssignedClients(created.id, selectedClientIds);
       }
 
       fetchStaffMembers();
@@ -236,6 +252,9 @@ export default function EmployeesSettingsTab() {
                   Email
                 </TableCell>
                 <TableCell style={{ fontWeight: "bold", fontSize: "16px" }}>
+                  Заказчики
+                </TableCell>
+                <TableCell style={{ fontWeight: "bold", fontSize: "16px" }}>
                   Действия
                 </TableCell>
               </TableRow>
@@ -263,6 +282,10 @@ export default function EmployeesSettingsTab() {
                     ) : (
                       "—"
                     )}
+                  </TableCell>
+                  <TableCell>
+                    {staff.assigned_clients?.map((client) => client.company_name).join(", ") ||
+                      "—"}
                   </TableCell>
 
                   <TableCell>
@@ -353,6 +376,27 @@ export default function EmployeesSettingsTab() {
               }
               onChange={(e) => handleInputChange("email", e.target.value)}
               margin="normal"
+            />
+
+            <Autocomplete
+              multiple
+              options={clients}
+              getOptionLabel={(client) => client.company_name}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              value={clients.filter((client) =>
+                selectedClientIds.includes(client.id),
+              )}
+              onChange={(_, value) =>
+                setSelectedClientIds(value.map((client) => client.id))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Заказчики"
+                  margin="normal"
+                  placeholder="Заявки этих заказчиков видит сотрудник"
+                />
+              )}
             />
 
             <TextField

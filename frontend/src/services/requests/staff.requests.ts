@@ -37,6 +37,7 @@ export interface StaffFromServer {
   role: Role; // Объект роли сотрудника.
   email: string | null;
   phone_number_staff: string | null;
+  assigned_clients?: { id: number; company_name: string }[];
 }
 
 // Интерфейс для роли пользователя.
@@ -129,6 +130,22 @@ export const staffApi = {
    * @returns Promise с массивом объектов `StaffFromServer`.
    * @throws Error в случае неудачного получения списка сотрудников.
    */
+  setAssignedClients: async (
+    staffId: number,
+    clientIds: number[],
+  ): Promise<StaffFromServer> => {
+    try {
+      const response = await api.put(`/staff/${staffId}/clients`, {
+        clientIds,
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(
+        error.response?.data?.error || "Failed to assign clients",
+      );
+    }
+  },
+
   getAllStaff: async (): Promise<StaffFromServer[]> => {
     try {
       const response = await api.get<StaffFromServer[]>("/staff/all");

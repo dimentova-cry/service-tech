@@ -1,9 +1,10 @@
 import { StaffRepository } from "../repositories/StaffRepository";
 import { RoleRepository } from "../repositories/RoleRepository";
 import bcrypt from "bcrypt";
-import { DataSource } from "typeorm";
+import { DataSource, In } from "typeorm";
 import { AppealRepository } from "../repositories/AppealRepository";
-import { Appeal } from "../entities/Appeal";
+import { ClientRepository } from "../repositories/ClientRepository";
+import { Client } from "../entities/Client";
 
 /**
  * Сервис для работы с сотрудниками (Staff)
@@ -12,12 +13,21 @@ export class StaffService {
   private staffRepo: StaffRepository;
   private roleRepo: RoleRepository;
   private appealRepo: AppealRepository;
+  private clientRepo: ClientRepository;
 
   constructor(dataSource: DataSource) {
     // Инициализация репозиториев
     this.staffRepo = new StaffRepository(dataSource);
     this.roleRepo = new RoleRepository(dataSource);
     this.appealRepo = new AppealRepository(dataSource);
+    this.clientRepo = new ClientRepository(dataSource);
+  }
+
+  private assignedClientsView(clients?: Client[]) {
+    return (clients ?? []).map((client) => ({
+      id: client.id,
+      company_name: client.company_name,
+    }));
   }
 
   /**
@@ -131,7 +141,41 @@ export class StaffService {
    * @returns Массив сотрудников с загруженными ролями
    */
   async getAllStaff() {
-    return this.staffRepo.find({ relations: ["role"] });
+    const staff = await this.staffRepo.find({
+      relations: ["role", "assigned_clients"],
+    });
+    return staff.map((member) => ({
+      ...member,
+      assigned_clients: this.assignedClientsView(member.assigned_clients),
+    }));
+  }
+
+  /**
+   * Заменяет набор заказчиков, заявки которых доступны сотруднику
+   */
+  async setAssignedClients(staffId: number, clientIds: number[]) {
+    const staff = await this.staffRepo.findOne({
+      where: { id: staffId },
+      relations: ["assigned_clients", "role"],
+    });
+    if (!staff) throw new Error("Сотрудник не найден");
+
+    const uniqueIds = [...new Set(clientIds)];
+    if (uniqueIds.length === 0) {
+      staff.assigned_clients = [];
+    } else {
+      const clients = await this.clientRepo.findBy({ id: In(uniqueIds) });
+      if (clients.length !== uniqueIds.length) {
+        throw new Error("Заказчик не найден");
+      }
+      staff.assigned_clients = clients;
+    }
+
+    const saved = await this.staffRepo.save(staff);
+    return {
+      ...saved,
+      assigned_clients: this.assignedClientsView(saved.assigned_clients),
+    };
   }
 
   /**

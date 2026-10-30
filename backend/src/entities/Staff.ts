@@ -4,9 +4,12 @@ import {
   Column,
   ManyToOne,
   OneToMany,
+  ManyToMany,
+  JoinTable,
 } from "typeorm";
 import { Role } from "./Role";
 import { Appeal } from "./Appeal";
+import { Client } from "./Client";
 
 // Сущность для таблицы сотрудников
 @Entity("staffs")
@@ -54,4 +57,17 @@ export class Staff {
   // ID в Telegram (необязательное поле)
   @Column({ length: 200, nullable: true })
   telegram_id: string;
+
+  // ID пользователя ВКонтакте (необязательное поле)
+  @Column({ length: 200, nullable: true })
+  vk_id: string;
+
+  // Заказчики, заявки которых видит этот сотрудник
+  @ManyToMany(() => Client, (client) => client.assigned_staff)
+  @JoinTable({
+    name: "staff_clients",
+    joinColumn: { name: "staff_id", referencedColumnName: "id" },
+    inverseJoinColumn: { name: "client_id", referencedColumnName: "id" },
+  })
+  assigned_clients: Client[];
 }

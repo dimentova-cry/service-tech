@@ -25,6 +25,7 @@ import { StaffService } from "./services/StaffService";
 import { AppealService } from "./services/AppealService";
 import { POinfoService } from "./services/POinfoService";
 import { TelegramService } from "./services/TelegramService";
+import { VkService } from "./services/VkService";
 
 import { authRouter } from "./routes/auth.routes";
 import { adminRouter } from "./routes/admin.routes";
@@ -53,11 +54,12 @@ app.use(express.json());
 const initServices = (dataSource: DataSource) => {
   // ... (без изменений) ...
   const telegramService = new TelegramService(dataSource);
+  const vkService = new VkService(dataSource);
   const authService = new AuthService(dataSource);
   const adminService = new AdminService(dataSource);
   const clientService = new ClientService(dataSource, telegramService);
   const staffService = new StaffService(dataSource);
-  const appealService = new AppealService(dataSource, telegramService);
+  const appealService = new AppealService(dataSource, telegramService, vkService);
   const poinfoService = new POinfoService(dataSource);
 
   return {

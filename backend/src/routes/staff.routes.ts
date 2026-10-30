@@ -73,6 +73,36 @@ export const staffRouter = (staffService: StaffService) => {
     },
   );
 
+  router.put(
+    "/:id/clients",
+    async (req: Request<{ id: string }>, res: Response) => {
+      try {
+        const staffId = parseInt(req.params.id);
+        const { clientIds } = req.body as { clientIds?: unknown };
+        if (
+          isNaN(staffId) ||
+          !Array.isArray(clientIds) ||
+          clientIds.some((id) => !Number.isInteger(id))
+        ) {
+          res.status(400).json({ error: "Некорректный список заказчиков" });
+          return;
+        }
+
+        const staff = await staffService.setAssignedClients(
+          staffId,
+          clientIds as number[],
+        );
+        res.json(staff);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Ошибка сохранения привязок заказчиков";
+        res.status(400).json({ error: message });
+      }
+    },
+  );
+
   // Обновление данных сотрудника
   router.put("/:id", async (req: Request<{ id: string }>, res: Response) => {
     try {

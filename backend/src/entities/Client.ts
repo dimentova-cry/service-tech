@@ -4,9 +4,11 @@ import {
   Column,
   ManyToOne,
   OneToMany,
+  ManyToMany,
 } from "typeorm";
 import { Role } from "./Role";
 import { Appeal } from "./Appeal";
+import { Staff } from "./Staff";
 
 // Сущность для таблицы клиентов
 @Entity("clients")
@@ -39,6 +41,10 @@ export class Client {
   @Column({ length: 200, nullable: true })
   telegram_id: string;
 
+  // ID пользователя ВКонтакте (необязательное поле)
+  @Column({ length: 200, nullable: true })
+  vk_id: string;
+
   // Email (макс. 40 символов)
   @Column({ length: 40, nullable: true })
   email: string;
@@ -50,4 +56,8 @@ export class Client {
   // Связь с обращениями (один клиент - много обращений)
   @OneToMany(() => Appeal, (appeal) => appeal.company_name_id)
   appeals: Appeal[];
+
+  // Сотрудники, которым доступны заявки этого заказчика
+  @ManyToMany(() => Staff, (staff) => staff.assigned_clients)
+  assigned_staff: Staff[];
 }

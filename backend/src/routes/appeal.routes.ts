@@ -23,6 +23,14 @@ export const appealRouter = (appealService: AppealService) => {
           return;
         }
 
+        if (req.currentUser!.role === "staff") {
+          const appeals = await appealService.getNewAppealsForStaff(
+            req.currentUser!.id,
+          );
+          res.json(appeals);
+          return;
+        }
+
         const appeals = await appealService.getNewAppeals();
         res.json(appeals);
       } catch (error: unknown) {
@@ -48,6 +56,13 @@ export const appealRouter = (appealService: AppealService) => {
           res.json(appeals);
           return;
         }
+        if (req.currentUser!.role === "staff") {
+          const appeals = await appealService.getAppealsInProgressForStaff(
+            req.currentUser!.id,
+          );
+          res.json(appeals);
+          return;
+        }
         const appeals = await appealService.getAppealsInProgress();
         res.json(appeals);
       } catch (error: unknown) {
@@ -68,6 +83,13 @@ export const appealRouter = (appealService: AppealService) => {
       try {
         if (req.currentUser!.role === "client") {
           const appeals = await appealService.getCompletedAppealsByClientId(
+            req.currentUser!.id,
+          );
+          res.json(appeals);
+          return;
+        }
+        if (req.currentUser!.role === "staff") {
+          const appeals = await appealService.getCompletedAppealsForStaff(
             req.currentUser!.id,
           );
           res.json(appeals);

@@ -42,6 +42,23 @@ export class AppealRepository extends Repository<Appeal> {
     });
   }
 
+  async findNewAppealsByClientIds(clientIds: number[]): Promise<Appeal[]> {
+    if (clientIds.length === 0) return [];
+
+    const status = await this.manager.findOne(AppealStatus, {
+      where: { st: "new" },
+    });
+    if (!status) return [];
+
+    return this.find({
+      where: {
+        status: { id: status.id },
+        company_name_id: { id: In(clientIds) },
+      },
+      relations: ["company_name_id", "status"],
+    });
+  }
+
   // Поиск обращений в работе
   async findAppealsInProgress(): Promise<Appeal[]> {
     const status = await this.manager.findOne(AppealStatus, {
@@ -71,6 +88,25 @@ export class AppealRepository extends Repository<Appeal> {
     });
   }
 
+  async findAppealsInProgressByClientIds(
+    clientIds: number[],
+  ): Promise<Appeal[]> {
+    if (clientIds.length === 0) return [];
+
+    const status = await this.manager.findOne(AppealStatus, {
+      where: { st: "in_progress" },
+    });
+    if (!status) return [];
+
+    return this.find({
+      where: {
+        status: { id: status.id },
+        company_name_id: { id: In(clientIds) },
+      },
+      relations: ["company_name_id", "status", "fio_staff_open_id"],
+    });
+  }
+
   // Поиск завершенных обращений
   async findCompletedAppeals(): Promise<Appeal[]> {
     const statuses = await this.manager.find(AppealStatus, {
@@ -92,6 +128,30 @@ export class AppealRepository extends Repository<Appeal> {
       order: {
         date_close: "DESC", // Рекомендую добавить сортировку по дате закрытия (новые сверху)
       },
+    });
+  }
+
+  async findCompletedAppealsByClientIds(
+    clientIds: number[],
+  ): Promise<Appeal[]> {
+    if (clientIds.length === 0) return [];
+
+    const statuses = await this.manager.find(AppealStatus, {
+      where: [{ st: "completed" }, { st: "cancel" }],
+    });
+    if (statuses.length === 0) return [];
+
+    return this.find({
+      where: {
+        status: { id: In(statuses.map((s) => s.id)) },
+        company_name_id: { id: In(clientIds) },
+      },
+      relations: [
+        "company_name_id",
+        "fio_staff_close_id",
+        "fio_staff_open_id",
+      ],
+      order: { date_close: "DESC" },
     });
   }
 

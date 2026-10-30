@@ -5,6 +5,7 @@ import { StaffRepository } from "../repositories/StaffRepository";
 import { DataSource, In } from "typeorm";
 import { excelExportService } from "./excel-export.service";
 import { TelegramService } from "./TelegramService";
+import { VkService } from "./VkService";
 import { AdminRepository } from "../repositories/AdminRepository";
 
 /**
@@ -20,6 +21,7 @@ export class AppealService {
   constructor(
     dataSource: DataSource,
     private telegramService: TelegramService,
+    private vkService: VkService,
   ) {
     // Инициализация репозиториев
     this.appealRepo = new AppealRepository(dataSource);
@@ -27,7 +29,33 @@ export class AppealService {
     this.clientRepo = new ClientRepository(dataSource);
     this.staffRepo = new StaffRepository(dataSource);
     this.adminRepo = new AdminRepository(dataSource);
-    this.telegramService = telegramService;
+  }
+
+  private async deliver(telegramSend: Promise<unknown>, vkSend: Promise<unknown>) {
+    const telegramSafe = telegramSend.then(
+      (value) => value,
+      (error) => {
+        console.error("Ошибка Telegram:", error);
+        return false;
+      },
+    );
+    const telegramLimited = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        console.error("Telegram не ответил за 8 секунд, заявка его не ждёт");
+        resolve(false);
+      }, 8000);
+      telegramSafe.then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      });
+    });
+
+    const results = await Promise.allSettled([telegramLimited, vkSend]);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error("Ошибка уведомления:", result.reason);
+      }
+    }
   }
 
   /**
@@ -62,25 +90,63 @@ export class AppealService {
     const admin = await this.adminRepo.getOneAdmin();
     if (!admin) throw new Error("Администратор не найден");
 
-    await this.telegramService.sendMessageToAdmin(
-      admin.phone_number_admin,
-      `Назначено новое задание: Заявка №${appeal.id} от ${client.company_name}. Приоритет заявки: ${priority}.`,
+    const newAppealText = `Назначено новое задание: Заявка №${appeal.id} от ${client.company_name}. Приоритет заявки: ${priority}.`;
+
+    await this.deliver(
+      this.telegramService.sendMessageToAdmin(
+        admin.phone_number_admin,
+        newAppealText,
+      ),
+      this.vkService.sendMessageToAdmin(admin.phone_number_admin, newAppealText),
     );
 
-    await this.telegramService.sendMessageToAllStaff(
-      `Назначено новое задание: Заявка №${appeal.id} от ${client.company_name}. Приоритет заявки: ${priority}.`,
-    );
+    await this.notifyAssignedStaff(client.id, newAppealText);
 
     return appeal;
+  }
+
+  private async notifyAssignedStaff(clientId: number, message: string) {
+    const clientWithStaff = await this.clientRepo.findOne({
+      where: { id: clientId },
+      relations: ["assigned_staff"],
+    });
+    for (const staff of clientWithStaff?.assigned_staff ?? []) {
+      if (!staff.phone_number_staff) continue;
+      await this.deliver(
+        this.telegramService.sendMessageToStaff(staff.phone_number_staff, message),
+        this.vkService.sendMessageToStaff(staff.phone_number_staff, message),
+      );
+    }
   }
 
   /**
    * Взятие заявки в работу
    */
+  private async staffCanAccessClient(staffId: number, clientId?: number) {
+    if (!clientId) return false;
+    const staff = await this.staffRepo.findOne({
+      where: { id: staffId },
+      relations: ["assigned_clients"],
+    });
+    if (!staff) throw new Error("Сотрудник не найден");
+    return (staff.assigned_clients ?? []).some(
+      (client) => client.id === clientId,
+    );
+  }
+
   async takeAppealToWork(appealId: number, staffId: number) {
     // Проверка существования заявки
-    const appeal = await this.appealRepo.findOne({ where: { id: appealId } });
+    const appeal = await this.appealRepo.findOne({
+      where: { id: appealId },
+      relations: ["company_name_id"],
+    });
     if (!appeal) throw new Error("Заявка не найдена");
+
+    const canAccess = await this.staffCanAccessClient(
+      staffId,
+      appeal.company_name_id?.id,
+    );
+    if (!canAccess) throw new Error("Нет доступа к заявкам этого заказчика");
 
     // Проверка существования сотрудника
     const staff = await this.staffRepo.findOne({ where: { id: staffId } });
@@ -107,6 +173,21 @@ export class AppealService {
     description: string,
     fio_staff: string,
   ) {
+    const existing = await this.appealRepo.findOne({
+      where: { id: appealId },
+      relations: ["company_name_id", "fio_staff_open_id"],
+    });
+    if (!existing) throw new Error("Заявка не найдена");
+
+    const canAccess = await this.staffCanAccessClient(
+      staffId,
+      existing.company_name_id?.id,
+    );
+    const isOpener = existing.fio_staff_open_id?.id === staffId;
+    if (!canAccess && !isOpener) {
+      throw new Error("Нет доступа к заявкам этого заказчика");
+    }
+
     // Проверка существования сотрудника
     const staff = await this.staffRepo.findOne({ where: { id: staffId } });
     if (!staff) throw new Error("Сотрудник не найден");
@@ -131,19 +212,21 @@ export class AppealService {
 
     if (!client) throw new Error("Клиент не найден");
 
+    const closedText = `Заявка №${appeal.id} от ${client.company_name} выполнена (закрыта)`;
+
     // Уведомление клиента
-    await this.telegramService.sendMessageToClient(
-      client.phone_number_client,
-      `Заявка №${appeal.id} от ${client.company_name} выполнена (закрыта)`,
+    await this.deliver(
+      this.telegramService.sendMessageToClient(client.phone_number_client, closedText),
+      this.vkService.sendMessageToClient(client.phone_number_client, closedText),
     );
 
     // Уведомление администратора
     const admin = await this.adminRepo.getOneAdmin();
     if (!admin) throw new Error("Администратор не найден");
 
-    await this.telegramService.sendMessageToAdmin(
-      admin.phone_number_admin,
-      `Заявка №${appeal.id} от ${client.company_name} выполнена (закрыта)`,
+    await this.deliver(
+      this.telegramService.sendMessageToAdmin(admin.phone_number_admin, closedText),
+      this.vkService.sendMessageToAdmin(admin.phone_number_admin, closedText),
     );
 
     const statuses = await this.statusRepo.find({
@@ -242,19 +325,19 @@ export class AppealService {
     const admin = await this.adminRepo.getOneAdmin();
     if (!admin) throw new Error("Администратор не найден");
 
-    await this.telegramService.sendMessageToAdmin(
-      admin.phone_number_admin,
-      `Заявка №${prevAppeal.id} от ${client.company_name} отменена заказчиком.`,
+    const cancelText = `Заявка №${prevAppeal.id} от ${client.company_name} отменена заказчиком.`;
+
+    await this.deliver(
+      this.telegramService.sendMessageToAdmin(admin.phone_number_admin, cancelText),
+      this.vkService.sendMessageToAdmin(admin.phone_number_admin, cancelText),
     );
 
-    await this.telegramService.sendMessageToClient(
-      client.phone_number_client,
-      `Заявка №${prevAppeal.id} от ${client.company_name} отменена заказчиком.`,
+    await this.deliver(
+      this.telegramService.sendMessageToClient(client.phone_number_client, cancelText),
+      this.vkService.sendMessageToClient(client.phone_number_client, cancelText),
     );
 
-    await this.telegramService.sendMessageToAllStaff(
-      `Заявка №${prevAppeal.id} от ${client.company_name} отменена заказчиком.`,
-    );
+    await this.notifyAssignedStaff(client.id, cancelText);
 
     if (prevAppeal.company_name_id) {
       const appeals = await this.appealRepo.find({
@@ -299,5 +382,32 @@ export class AppealService {
 
   async getCompletedAppealsByClientId(clientId: number) {
     return this.appealRepo.getCompletedAppealsByClientId(clientId);
+  }
+
+  private async assignedClientIds(staffId: number) {
+    const staff = await this.staffRepo.findOne({
+      where: { id: staffId },
+      relations: ["assigned_clients"],
+    });
+    if (!staff) throw new Error("Сотрудник не найден");
+    return (staff.assigned_clients ?? []).map((client) => client.id);
+  }
+
+  async getNewAppealsForStaff(staffId: number) {
+    return this.appealRepo.findNewAppealsByClientIds(
+      await this.assignedClientIds(staffId),
+    );
+  }
+
+  async getAppealsInProgressForStaff(staffId: number) {
+    return this.appealRepo.findAppealsInProgressByClientIds(
+      await this.assignedClientIds(staffId),
+    );
+  }
+
+  async getCompletedAppealsForStaff(staffId: number) {
+    return this.appealRepo.findCompletedAppealsByClientIds(
+      await this.assignedClientIds(staffId),
+    );
   }
 }

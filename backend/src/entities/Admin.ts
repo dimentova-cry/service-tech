@@ -31,6 +31,10 @@ export class Admin {
   @Column({ length: 200, nullable: true })
   telegram_id: string;
 
+  // ID пользователя ВКонтакте (может быть null, макс. 200 символов)
+  @Column({ length: 200, nullable: true })
+  vk_id: string;
+
   // Email (макс. 40 символов)
   @Column({ length: 40, nullable: true })
   email: string;

@@ -10,5 +10,7 @@
     "emitDecoratorMetadata": true,
     "skipLibCheck": true,
     "strictPropertyInitialization": false
-  }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules", "test"]
 }
